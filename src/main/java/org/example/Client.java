@@ -1,44 +1,89 @@
 package org.example;
 
+import javafx.application.Application;
 import javafx.application.Platform;
-import javafx.scene.control.TextArea;
+import javafx.scene.Scene;
+import javafx.scene.control.*;
+import javafx.scene.layout.VBox;
+import javafx.stage.Stage;
 import org.example.model.ClientLogin;
 import org.example.model.Message;
 
 import java.io.*;
 import java.net.Socket;
 
-public class Client {
+public class Client extends Application {
     private Socket socket;
     private ObjectOutputStream objOut;
     private ObjectInputStream objIn;
-    private TextArea chatArea;   // zone d'affichage dans l'UI
+
     private String username;
 
-    public Client(TextArea chatArea) {
-        this.chatArea = chatArea;
+    // UI chat
+    private TextArea chatArea;
+    private TextField messageField;
+    private Button sendButton;
+
+    @Override
+    public void start(Stage primaryStage) {
+        Label label = new Label("Entrez votre nom d'utilisateur :");
+        TextField usernameField = new TextField();
+        usernameField.setPromptText("Nom d'utilisateur");
+        Button connectButton = new Button("Se connecter");
+
+        VBox loginLayout = new VBox(10, label, usernameField, connectButton);
+        Scene loginScene = new Scene(loginLayout, 300, 200);
+
+        // === SCENE 2 : CHAT ===
+        chatArea = new TextArea();
+        chatArea.setEditable(false);
+
+        messageField = new TextField();
+        messageField.setPromptText("Votre message...");
+        sendButton = new Button("Envoyer");
+
+        VBox chatLayout = new VBox(10, chatArea, messageField, sendButton);
+        Scene chatScene = new Scene(chatLayout, 400, 400);
+
+        // Action du bouton connexion
+        connectButton.setOnAction(e -> {
+            username = usernameField.getText().trim();
+            if (username.isEmpty()) {
+                showAlert("Erreur", "Veuillez entrer un nom d'utilisateur.");
+                return;
+            }
+            if (connectToServer()) {
+                primaryStage.setScene(chatScene); // switch vers la scène chat
+            } else {
+                showAlert("Erreur", "Impossible de se connecter au serveur.");
+            }
+        });
+
+        // Action du bouton envoyer
+        sendButton.setOnAction(e -> sendMessage());
+
+        primaryStage.setScene(loginScene);
+        primaryStage.setTitle("Client Chat");
+        primaryStage.show();
     }
 
-    public void startClient() {
+    // Connexion au serveur
+    private boolean connectToServer() {
         try {
-            // pour ce test : on fixe un nom ou on pourrait demander avec une TextField
-            this.username = "User-" + (int)(Math.random()*1000);
-            ClientLogin clientLogin = new ClientLogin(username);
-
             socket = new Socket("localhost", 5000);
-
             objOut = new ObjectOutputStream(socket.getOutputStream());
             objIn = new ObjectInputStream(socket.getInputStream());
 
-            // envoi login
+            // envoyer login
+            ClientLogin clientLogin = new ClientLogin(username);
             objOut.writeObject(clientLogin);
             objOut.flush();
 
-            // lire premier message du serveur (accueil)
+            // lire message d'accueil
             Message greeting = (Message) objIn.readObject();
             appendToChat("[Serveur] " + greeting.getMessage());
 
-            // thread qui écoute les messages du serveur
+            // thread pour écouter les messages
             new Thread(() -> {
                 try {
                     while (true) {
@@ -50,23 +95,49 @@ public class Client {
                 }
             }).start();
 
-        } catch (IOException | ClassNotFoundException e) {
+            return true;
+        } catch (Exception e) {
             e.printStackTrace();
+            return false;
         }
     }
 
-    public void sendMessage(String msg) {
+    // Envoi d'un message
+    private void sendMessage() {
+        String msg = messageField.getText().trim();
+        if (msg.isEmpty()) return;
+
         try {
             Message message = new Message();
             message.setMessage(username + ": " + msg);
             objOut.writeObject(message);
             objOut.flush();
+            messageField.clear();
+
+            if (msg.equalsIgnoreCase("exit")) {
+                socket.close();
+                appendToChat("Vous avez quitté la conversation.");
+                sendButton.setDisable(true);
+                messageField.setDisable(true);
+            }
         } catch (Exception e) {
             e.printStackTrace();
+            appendToChat("Erreur lors de l'envoi du message.");
         }
     }
 
+    // Afficher message dans l'UI
     private void appendToChat(String text) {
-        Platform.runLater(() -> chatArea.appendText("\n" + text));
+        Platform.runLater(() -> chatArea.appendText(text + "\n"));
+    }
+
+    private void showAlert(String title, String msg) {
+        Alert alert = new Alert(Alert.AlertType.ERROR, msg, ButtonType.OK);
+        alert.setTitle(title);
+        alert.showAndWait();
+    }
+
+    public static void main(String[] args) {
+        launch(args);
     }
 }
