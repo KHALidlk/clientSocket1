@@ -70,20 +70,17 @@ public class Client extends Application {
     // Connexion au serveur
     private boolean connectToServer() {
         try {
-            socket = new Socket("localhost", 5000);
+            socket = new Socket("192.168.234.247", 5000);
             objOut = new ObjectOutputStream(socket.getOutputStream());
             objIn = new ObjectInputStream(socket.getInputStream());
 
-            // envoyer login
             ClientLogin clientLogin = new ClientLogin(username);
             objOut.writeObject(clientLogin);
             objOut.flush();
 
-            // lire message d'accueil
             Message greeting = (Message) objIn.readObject();
             appendToChat("[Serveur] " + greeting.getMessage());
 
-            // thread pour écouter les messages
             new Thread(() -> {
                 try {
                     while (true) {
